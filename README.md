@@ -10,15 +10,11 @@ the compiled exe and all dependencies. No Python installation needed.
 ## Running from source
 
 1. Install [Python 3.9+](https://www.python.org/downloads/)
-2. Install dependencies:
+2. Download this repo
+3. Install dependencies:
    ```
    pip install -U numpy pillow scipy customtkinter
    ```
-3. Download the required binaries into `dependencies/`:
-   - [ffmpeg.exe](https://ffmpeg.org/download.html) (Windows build)
-   - [ffprobe.exe](https://ffmpeg.org/download.html) (comes with ffmpeg)
-   - [yt-dlp.exe](https://github.com/yt-dlp/yt-dlp/releases)
-   - [deno.exe](https://deno.land/)
 4. Run:
    ```
    python retime.py
