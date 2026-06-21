@@ -21,7 +21,13 @@ from tkinter import filedialog
 # --------------------------------------------------------------------------- #
 #  Tunables                                                                    #
 # --------------------------------------------------------------------------- #
-NCC_THRESH      = 0.6
+# Icon-match threshold. Kept low on purpose: the load icon is rendered at
+# slightly different sizes/positions across recordings, so its correlation
+# score varies a lot (e.g. 0.83 on one video, 0.48 on another where the icon
+# is smaller). A coincidental bright blob can even out-score a real-but-small
+# icon, so NCC alone can't separate loads from junk -- the background
+# concentration check (BG_FLAT_FRAC) does the real false-positive rejection.
+NCC_THRESH      = 0.40
 MIN_LOAD_FRAMES = 2
 MERGE_GAP       = 2
 ONLY_TEMPLATES  = None
@@ -30,8 +36,26 @@ BLUR_LEVELS = (1.5, 3.0)
 ICON_BRIGHT_MARGIN = 50
 MIN_ICON_BRIGHT    = 0.02
 
-BG_TOL          = 18
-BG_FLAT_FRAC    = 0.60
+# A real load screen's background is a single SOLID colour field behind the
+# icon: almost every background pixel shares one exact gray value. We measure
+# the "concentration" -- the fraction of background pixels within BG_TOL of the
+# single most common value (the mode). This beats the absolute-brightness and
+# loose-uniformity approaches on two fronts:
+#   * Gamma-independent: it keys off the mode, not zero, so a raised-gamma load
+#     (solid gray ~12 instead of pure black) still scores ~1.0.
+#   * Overlay-tolerant: a timer / LiveSplit panel covers part of the frame but
+#     the rest is still the one solid value, so a panel covering up to ~35% of
+#     the frame still passes. A dim-but-textured gameplay scene (curtains,
+#     walls, a stray candle that fools the icon match) has its dark pixels
+#     SPREAD across many values -- only ~0.55 land on the mode -- so it fails.
+# BG_TOL is kept tiny (just absorbs compression dithering of the flat field).
+BG_TOL          = 1
+BG_FLAT_FRAC    = 0.65
+# A load screen is a *dark* solid field. A fade-to-white / bright transition is
+# also "concentrated" and could otherwise sneak through, so require the solid
+# background value (the mode) to be dark. Comfortably above any raised-gamma
+# load (~12-50) while rejecting white/bright uniform frames (~200+).
+LOAD_MAX_MODE   = 120
 
 WORK_WIDTH  = 480
 WHITE_THR   = 100
@@ -248,9 +272,10 @@ def analyse(video, start, duration, work_w, work_h, templates, bg_mask, progress
         if frame.mean() < BRIGHT_SKIP:
             score, name = detect(frame, templates)
             if score >= NCC_THRESH:
-                bg = frame[bg_mask].astype(np.int16)
-                flat = np.mean(np.abs(bg - np.median(bg)) <= BG_TOL)
-                if flat >= BG_FLAT_FRAC:
+                bg = frame[bg_mask]
+                mode = np.bincount(bg, minlength=256).argmax()
+                conc = np.mean(np.abs(bg.astype(np.int16) - mode) <= BG_TOL)
+                if conc >= BG_FLAT_FRAC and mode <= LOAD_MAX_MODE:
                     marks.append((idx, name))
         if total % PROGRESS_EVERY == 0:
             progress(total)
